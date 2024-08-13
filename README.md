@@ -10,10 +10,10 @@ The code provided here is fully reproducible. All required input files are inclu
 
 - **scripts/**: Contains the Rmd code necessary to reproduce the analysis (QC, normalization, visualizations)
 - **results/**: Directory for storing normalized nCounter data and figures
-GeoMX_nCounter.HKnormalized.bgRemoved.xlsx: Multi-sheet excel with normalized counts with probes below background threshold removed, sample metadata, and feature metadata
-GeoMX_nCounter.HKnormalized.xlsx: Multi-sheet excel with normalized counts with probes below background threshold included, sample metadata, and $
-PCA_plot.png: PCA plot of ROIs labeled by islet inflammation and KO vs HET genotype.	
-heatmap_high_res.png: Heatmap of QC filtered proteins annotated by islet inflammation and KO vs HET genotype. Samples (in columns) are clustered by expression profile.
+**GeoMX_nCounter.HKnormalized.bgRemoved.xlsx**: Multi-sheet excel with normalized counts with probes below background threshold removed, sample metadata, and feature metadata
+**GeoMX_nCounter.HKnormalized.xlsx**: Multi-sheet excel with normalized counts with probes below background threshold included, sample metadata, and $
+**PCA_plot.png**: PCA plot of ROIs labeled by islet inflammation and KO vs HET genotype.	
+**heatmap_high_res.png**: Heatmap of QC filtered proteins annotated by islet inflammation and KO vs HET genotype. Samples (in columns) are clustered by expression profile.
 
 - **data/**: Directory with nCounter count and sample data exported from the GeoMX DSP Initial Dataset 
 
