@@ -1,4 +1,4 @@
-# scRNAseq of HuBMAP pancreas
+# nCounter of inflamed mouse islets
 
 This repository contains scripts and files related to the processing and analysis of nCounter protein expression data generated for GeoMX DSP ROIs from inflamed and non-inflamed KO and HE Mus musculus islets.
 
