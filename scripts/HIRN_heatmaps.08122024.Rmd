@@ -1,7 +1,7 @@
 ---
-title: "Zeina_nCounter_analysis"
+title: "HIRN insulitis nCounter analysis"
 author: "Heather Kates"
-date: "2024-03-18"
+date: "08-12-2024"
 output: html_document
 ---
 
@@ -25,10 +25,10 @@ Load the data downloaded from the GeoMX DSP Initial_Dataset.xlsx and received fr
 First we will load the data as-is and perform no automatic QC trimming or normalization
 
 ```{r process,warning=FALSE}
-rawdata <- processNanostringData(nsFiles = "Zeina_all_counts.csv",
-                             sampleTab = "Zeina_all_sample_data.csv",
-                             idCol = "idCol",
-                             groupCol = "groups",
+rawdata <- processNanostringData(nsFiles = "/blue/timgarrett/hkates/Campbell-Thompson/HIRN/data/HIRN_08122024_counts.csv",
+                             sampleTab = "/blue/timgarrett/hkates/Campbell-Thompson/HIRN/data/HIRN_08122024_SampleData.csv",
+                             idCol = "Custom_Segment_Name",
+                             groupCol = "Segment_Tags",
                              normalization = "none")
 ```
 
@@ -71,11 +71,11 @@ plot_data <- data.frame(
   Scan_Name = sample_data$Scan_Name
 )
 
-# Plot the barplot with no x-axis labels and "Individual AOIs" as the x-axis title
+# Plot the barplot with no x-axis labels and "Individual ROIs" as the x-axis title
 ggplot(plot_data, aes(x = Sample, y = HK_Geomean, fill = Scan_Name)) +
   geom_bar(stat = "identity") +
   theme_minimal() +
-  labs(x = "Individual AOIs", y = "Housekeeper Geomean", fill = "Scan Name") +
+  labs(x = "Individual ROIs", y = "Housekeeper Geomean", fill = "Scan Name") +
   theme(axis.text.x = element_blank(), axis.ticks.x = element_blank())
 ```
 
@@ -115,7 +115,7 @@ plot_data <- data.frame(
 ggplot(plot_data, aes(x = Sample, y = IgG_Geomean, fill = Scan_Name)) +
   geom_bar(stat = "identity") +
   theme_minimal() +
-  labs(x = "Individual AOIs", y = "IgG Geomean", fill = "Scan Name") +
+  labs(x = "Individual ROIs", y = "IgG Geomean", fill = "Scan Name") +
   theme(axis.text.x = element_blank(), axis.ticks.x = element_blank())
 ```
 
@@ -125,10 +125,10 @@ Technical QC assessment includes FOV registration QC, Binding Density QC, Positi
 
 
 ```{r QC}
-QC_data <- processNanostringData(nsFiles = "Zeina_all_counts.csv",
-                             sampleTab = "Zeina_all_sample_data.csv",
-                             idCol = "idCol",
-                             groupCol = "groups",
+QC_data <- processNanostringData(nsFiles = "/blue/timgarrett/hkates/Campbell-Thompson/HIRN/data/HIRN_08122024_counts.csv",
+                             sampleTab = "/blue/timgarrett/hkates/Campbell-Thompson/HIRN/data/HIRN_08122024_SampleData.csv",
+                             idCol = "Custom_Segment_Name",
+                             groupCol = "Segment_Tags",
                              normalization = "nSolver",
                              skip.housekeeping = TRUE,
                              output.format = "list")
@@ -162,12 +162,12 @@ QC_data$samples$SurfaceArea_QC_Flag <- QC_data$samples$AOI_surface_area < surfac
 # We'll filter the data for any rows with at least one TRUE flag
 QC_flagged_data <- QC_data$samples %>%
   filter(FOV_QC_Flag | BindingDensity_QC_Flag | PCNorm_QC_Flag | NucleiCount_QC_Flag | SurfaceArea_QC_Flag) %>%
-  select(idCol, FOV_QC_Flag, BindingDensity_QC_Flag, PCNorm_QC_Flag, NucleiCount_QC_Flag, SurfaceArea_QC_Flag)
+  select(Custom_Segment_Name, FOV_QC_Flag, BindingDensity_QC_Flag, PCNorm_QC_Flag, NucleiCount_QC_Flag, SurfaceArea_QC_Flag)
 
 # Print the table using kable in R Markdown
 kable(QC_flagged_data,row.names = FALSE)
 #save to a list
-QC_flagged_segments <- QC_flagged_data$idCol
+QC_flagged_segments <- QC_flagged_data$Custom_Segment_Name
 ```
 
 ## Probe QC
@@ -233,8 +233,9 @@ We will remove the four segments that failed segment QC.
 
 ```{r}
 #Define segments to keep
-QC_passed_segments <- rawdata$idCol[!rawdata$idCol %in% QC_flagged_segments]
-data_filtered <- rawdata[,QC_passed_segments]
+QC_passed_segments <- rawdata$Custom_Segment_Name[!rawdata$Custom_Segment_Name %in% QC_flagged_segments]
+#data_filtered <- rawdata[,QC_passed_segments]
+data_filtered <- rawdata
 ```
 
 For now, we will leave all the probes in the dataset even though some have below background signal. We will make a list of these so that we can proceed with caution when evaluating results for these genes
@@ -301,7 +302,6 @@ for (i in seq_along(ig_pairs)) {
 print(plots)
 ```
 
-All the IgG counts are too low to use negative control normalization
 
 ## Explore Housekeeper consistency (Housekeeping normalization)
 
@@ -367,7 +367,6 @@ print(plots)
 print(correlations)
 ```
 
-We'll exclude S6 from housekeeping normalization due to the relatively lower correlation between it and other HK genes
 
 ### Check for consistency between IgG's, housekeepers, area, nuclei counts
 
@@ -472,7 +471,7 @@ print(p5)
 print(p6)
 ```
 
-Based on these results, we can consider HK (not S6) normalization and scaling to nuceli count or area.
+Based on these results, we can consider HK normalization and scaling to nuceli count or area.
 
 ## Normalization
 
@@ -480,42 +479,37 @@ We will use housekeeping normalization with GAPDH and Histone H3
 
 ```{r process_norm,warning=FALSE}
 #First we need to write the expression (including sample data) and feature data to csv files so we can re-process, becuase the next steps can only be done with a list or a new object
-filt_counts <- read.csv("Zeina_all_counts.csv")
-filt_counts <- filt_counts %>% dplyr::select(c(colnames(filt_counts)[1:3], sample_data$idCol))
-filt_sample <- read.csv("Zeina_all_sample_data.csv")
-filt_sample <- filt_sample %>% dplyr::filter(idCol %in% sample_data$idCol)
-write.csv(x = filt_counts, file="filtered_counts.csv",row.names = FALSE)
-write.csv(x=filt_sample,file="filtered_sample_data.csv")
+filt_counts <- read.csv("/blue/timgarrett/hkates/Campbell-Thompson/HIRN/data/HIRN_08122024_counts.csv")
+filt_counts <- filt_counts %>% dplyr::select(c(colnames(filt_counts)[1:3], sample_data$Custom_Segment_Name))
+filt_sample <- read.csv("/blue/timgarrett/hkates/Campbell-Thompson/HIRN/data/HIRN_08122024_SampleData.csv")
+filt_sample <- filt_sample %>% dplyr::filter(Custom_Segment_Name %in% sample_data$Custom_Segment_Name)
+write.csv(x = filt_counts, file="/blue/timgarrett/hkates/Campbell-Thompson/HIRN/results/filtered_counts.csv",row.names = FALSE)
+write.csv(x=filt_sample,file="/blue/timgarrett/hkates/Campbell-Thompson/HIRN/results/filtered_sample_data.csv")
 ```
 
 ```{r,echo=TRUE}
 #Process the filtered data with housekeeping normalization, bgType = "none" prevents the low signal probes from being removed. Background subtraction is still performed.
 
-HKnorm_data <- processNanostringData(nsFiles = "filtered_counts.csv",
-                             sampleTab = "filtered_sample_data.csv",
-                             idCol = "idCol",
-                             groupCol = "groups",
+HKnorm_data <- processNanostringData(nsFiles = "/blue/timgarrett/hkates/Campbell-Thompson/HIRN/results/filtered_counts.csv",
+                             sampleTab = "/blue/timgarrett/hkates/Campbell-Thompson/HIRN/results/filtered_sample_data.csv",
+                             idCol = "Custom_Segment_Name",
+                             groupCol = "Segment_Tags",
                              bgType="none",
                              normalization = "nSolver",
                              bgSubtract = TRUE,
-                             housekeeping = c("GAPDH","Histone H3"))
+                             housekeeping = c("GAPDH","Histone H3","S6"))
 ```
-
 
 ## View metadata
 
-The variable used to assess heterogeneity was called "groups" and has three levels.
+The variable used to assess heterogeneity was called "Segment_Tags" and has six levels.
 
 ```{r meta,echo=FALSE}
-knitr::kable(table(HKnorm_data$groups), 
+knitr::kable(table(HKnorm_data$Segment_Tags), 
              caption = "Distribution of Groups")
-
-knitr::kable(table(HKnorm_data$Segment), 
-             caption = "Distribution of Segments")
-
 ```
 
-## View a PCA of samples (ROIs) colored by Scan_Name to assess batch effects
+## View a PCA of ROIs colored by Scan_Name to assess batch effects
 
 ```{r PCA1,echo=FALSE}
 data <- HKnorm_data
@@ -550,7 +544,7 @@ print(PCAp)
 rm(data)
 ```
 
-## View a PCA of samples (ROIs) colored by "group"
+## View a PCA of ROIs colored by variable of interest
 
 ```{r PCA2,echo=FALSE}
 data <- HKnorm_data
@@ -558,90 +552,68 @@ data <- HKnorm_data
 # Create a data frame for plotting
 pca_data <- data.frame(PC1 = pca_result$x[, 1],
                        PC2 = pca_result$x[, 2],
-                       groups = sample_data$groups)
+                       groups = sample_data$Segment_Tags)
 
 PCAp <- ggplot(pca_data, aes(x = PC1, y = PC2, color = groups)) +
   geom_point(alpha = 0.8, size = 3) +
   theme_minimal() +
   labs(title = "PCA of Expression Data", x = "PC1", y = "PC2") +
-  scale_color_discrete(name = "Groups")
-
+  scale_color_discrete(name = "groups")
 # Display the plot
 print(PCAp)
+# Update the PCA plot with better aesthetics
+PCAprint <- PCAp + 
+  theme_minimal(base_size = 16) +  # Set a minimal theme with a base font size
+  theme(
+    plot.title = element_text(hjust = 0.5, face = "bold", size = 18),  # Center and bold the title
+    axis.title = element_text(face = "bold"),  # Bold axis titles
+    axis.text = element_text(size = 14),  # Increase axis text size
+    legend.title = element_text(face = "bold"),  # Bold the legend title
+    legend.text = element_text(size = 14),  # Increase legend text size
+    legend.position = "right",  # Position the legend on the right
+    legend.background = element_rect(fill = "white", color = "black"),  # Add a border to the legend
+    panel.grid.major = element_line(color = "grey80", size = 0.5),  # Adjust the grid lines
+    panel.grid.minor = element_blank(),  # Remove minor grid lines
+    plot.background = element_rect(fill = "white"),  # Ensure a white background
+    panel.border = element_blank()  # Remove the panel border
+  ) +
+  labs(
+    title = "PCA of Expression Data",
+    x = "PC1",
+    y = "PC2",
+    color = "Groups"
+  ) +
+  geom_point(size = 3)  # Make points larger and vary shapes by group
+
+# Save the updated plot
+ggsave("/blue/timgarrett/hkates/Campbell-Thompson/HIRN/results/PCA_plot.png", PCAprint, dpi = 300, width = 10, height = 8)
 rm(data)
 ```
 
 ## Heatmaps with only proteins that passed background QC
 
 ```{r,echo=TRUE}
-#Process the filtered data with housekeeping normalization, bgType = "none"
-HKnorm_bg_data <- processNanostringData(nsFiles = "filtered_counts.csv",
-                             sampleTab = "filtered_sample_data.csv",
-                             idCol = "idCol",
-                             groupCol = "groups",
+#Process the filtered data with housekeeping normalization, bgType = "threshold"
+HKnorm_bg_data <- processNanostringData(nsFiles = "/blue/timgarrett/hkates/Campbell-Thompson/HIRN/results/filtered_counts.csv",
+                             sampleTab = "/blue/timgarrett/hkates/Campbell-Thompson/HIRN/results/filtered_sample_data.csv",
+                             idCol = "Custom_Segment_Name",
+                             groupCol = "Segment_Tags",
                              bgType="threshold",
-                             bgSubtract = TRUE,
                              normalization = "nSolver",
-                             housekeeping = c("GAPDH","Histone H3"))
+                             bgSubtract = TRUE,
+                             housekeeping = c("GAPDH","Histone H3","S6"))
 ```
 
-```{r}
+```{r,eval=FALSE}
 Subset_bg_data <- HKnorm_bg_data[,pData(HKnorm_bg_data)$Segment %in% c("CD45","Others")]
-```
-
-```{r QCHeatmap,echo=FALSE,fig.dim=c(10,6)}
-data <- Subset_bg_data
-
-# Extract expression data for the genes of interest
-genes_to_plot <- rownames(data@featureData@data %>% filter(CodeClass=="Endogenous"))
-exprs_data <- data@assayData[["exprs"]]
-genes_data <- data[genes_to_plot, ]
-
-# Check if genes_to_plot actually exist in the data
-missing_genes <- genes_to_plot[!genes_to_plot %in% rownames(exprs_data)]
-if(length(missing_genes) > 0) {
-  warning("The following genes are missing in the dataset and will be skipped:", paste(missing_genes, collapse = ", "))
-}
-
-# Extract sample data and determine order based on groups
-sample_data <- data@phenoData@data
-samples_order <- order(sample_data$Segment)
-
-# Prepare the data matrix for the heatmap, possibly normalizing or transforming as necessary
-heatmap_data <- genes_data[, samples_order]
-#log transform
-# Extract the expression matrix from the ExpressionSet
-exprs_data <- exprs(heatmap_data)
-# Apply log transformation. Adding a small constant to avoid log of zero issues.
-exprs_data_log <- log1p(exprs_data)
-
-
-# Plot the heatmap
-# Note: Adjust the parameters of pheatmap as needed for your specific dataset and visualization preferences
-pheatmap(exprs_data_log,
-         #scale = "row", # Scale proteins to have 0 mean and 1 variance
-         clustering_distance_rows = "euclidean",
-         clustering_distance_cols = "euclidean",
-         clustering_method = "complete",
-         cluster_cols = FALSE,
-         cluster_rows=TRUE,
-         color = colorRampPalette(c("blue", "white", "red"))(255), # Color gradient: adjust as needed
-         show_rownames = TRUE,
-         show_colnames = TRUE, # Change to TRUE if you want to show sample names
-         annotation_col = sample_data[samples_order,c("Segment","Scan_Name"), drop = FALSE],
-         fontsize_col = 10,
-         fontsize_row = 10,# Adjust as needed for sample annotations
-main="log() expression levels of QC-pass proteins across all segments")
-rm(data)
 ```
 
 ### We can look at a heatmap of row-scaled data where the heatmap displays how each sample's expression level of a given protein compares to the average expression level of that protein across all samples. 
 
 Therefore, the color in the heatmap indicates how much higher or lower the expression is relative to the protein's own average, not the absolute expression levels. Note that in row-scaled data, you cannot compare the relative levels of a protein within a sample.
 
-```{r QCScaledHeatmap,echo=FALSE,fig.dim=c(10,6)}
-data <- Subset_bg_data
-
+```{r QCScaledHeatmap,echo=FALSE,fig.dim=c(10,6),eval=FALSE}
+data <- HKnorm_bg_data
 # Extract expression data for the genes of interest
 genes_to_plot <- rownames(data@featureData@data %>% filter(CodeClass=="Endogenous"))
 exprs_data <- data@assayData[["exprs"]]
@@ -672,7 +644,7 @@ pheatmap(heatmap_data,
          color = colorRampPalette(c("blue", "white", "red"))(255), # Color gradient: adjust as needed
          show_rownames = TRUE,
          show_colnames = TRUE, # Change to TRUE if you want to show sample names
-         annotation_col = sample_data[samples_order,c("Segment","Scan_Name"), drop = FALSE],
+         annotation_col = sample_data[samples_order,"Segment_Tags", drop = FALSE],
          fontsize_col = 10,
          fontsize_row = 10,# Adjust as needed for sample annotations
 main="row-scaled levels of QC-passed proteins across all segments")
@@ -684,7 +656,7 @@ rm(data)
 ```{r}
 #Subset CD45 segments
 #Subset_data <- HKnorm_data[,pData(HKnorm_data)$Segment=="CD45"]
-Subset_data <- HKnorm_data[,pData(HKnorm_data)$Segment %in% c("CD45","Others")]
+Subset_data <- HKnorm_bg_data
 ```
 
 ```{r AllHeatmap,echo=FALSE,fig.dim=c(10,6)}
@@ -714,70 +686,58 @@ exprs_data <- exprs(heatmap_data)
 exprs_data_log <- log1p(exprs_data)
 
 
-# Plot the heatmap
-# Note: Adjust the parameters of pheatmap as needed for your specific dataset and visualization preferences
-pheatmap(exprs_data_log,
-         #scale = "row", # Scale proteins to have 0 mean and 1 variance
+# Median Centering of Rows
+median_centered_data <- t(apply(exprs_data_log, 1, function(x) x - median(x, na.rm = TRUE)))
+
+# Set file path
+output_file <- "/blue/timgarrett/hkates/Campbell-Thompson/HIRN/results/heatmap_high_res.png"
+
+# Define the dimensions (width and height) based on the number of rows and columns
+width <- 10 + (90 * 0.2)  # Adjust width for 90 columns
+height <- 10 + (35 * 0.5) # Adjust height for 35 rows
+
+# Create the heatmap with a multi-line title
+pheatmap(median_centered_data,
+         scale = "none", # Scaling already done manually
          clustering_distance_rows = "euclidean",
          clustering_distance_cols = "euclidean",
          clustering_method = "complete",
-         cluster_cols = FALSE,
-         cluster_rows=TRUE,
-         color = colorRampPalette(c("blue", "white", "red"))(255), # Color gradient: adjust as needed
+         cluster_cols = TRUE,
+         cluster_rows = TRUE,
+         color = colorRampPalette(c("blue", "white", "red"))(255),
          show_rownames = TRUE,
-         show_colnames = TRUE, # Change to TRUE if you want to show sample names
-         annotation_col = sample_data[samples_order,c("Segment","Scan_Name"), drop = FALSE],
-         fontsize_col = 10,
-         fontsize_row = 10,# Adjust as needed for sample annotations
-main="log() expression levels of all proteins across all CD45 segments")
-rm(data)
-```
+         show_colnames = FALSE,
+         annotation_col = sample_data[samples_order, "Segment_Tags", drop = FALSE],
+         fontsize_col = 12,  # Increase column annotation font size if needed
+         fontsize_row = 14,  # Increase row label font size
+         fontsize = 20,      # Increase general font size (affects legend, etc.)
+         cellheight = 20,     # Adjust cell height to make rows shorter
+         main = "Median-centered log() expression levels of filtered proteins across all ROIs\n(heatmap without dendrograms)",
+         filename = output_file,  # Saving directly to a file
+         width = 20,           # Adjust these parameters as needed
+         height = 10)
 
-### We can look at a heatmap of row-scaled data where the heatmap displays how each sample's expression level of a given protein compares to the average expression level of that protein across all samples. 
-
-Therefore, the color in the heatmap indicates how much higher or lower the expression is relative to the protein's own average, not the absolute expression levels.
-
-```{r AllScaledHeatmap,echo=FALSE,fig.dim=c(10,8)}
-data <- Subset_data
-
-# Extract expression data for the genes of interest
-genes_to_plot <- rownames(data@featureData@data %>% filter(CodeClass=="Endogenous"))
-exprs_data <- data@assayData[["exprs"]]
-genes_data <- data[genes_to_plot, ]
-
-# Check if genes_to_plot actually exist in the data
-missing_genes <- genes_to_plot[!genes_to_plot %in% rownames(exprs_data)]
-if(length(missing_genes) > 0) {
-  warning("The following genes are missing in the dataset and will be skipped:", paste(missing_genes, collapse = ", "))
-}
-
-# Extract sample data and determine order based on groups
-sample_data <- data@phenoData@data
-samples_order <- order(sample_data$Segment)
-
-# Prepare the data matrix for the heatmap, possibly normalizing or transforming as necessary
-heatmap_data <- genes_data[, samples_order]
-
-# Plot the heatmap
-# Note: Adjust the parameters of pheatmap as needed for your specific dataset and visualization preferences
-pheatmap(heatmap_data,
-         scale = "row", # Scale proteins to have 0 mean and 1 variance
+pheatmap(median_centered_data,
+         scale = "none",
          clustering_distance_rows = "euclidean",
          clustering_distance_cols = "euclidean",
          clustering_method = "complete",
-         cluster_cols = FALSE,
-         cluster_rows=TRUE,
-         color = colorRampPalette(c("blue", "white", "red"))(255), # Color gradient: adjust as needed
+         cluster_cols = TRUE,
+         cluster_rows = TRUE,
+         color = colorRampPalette(c("blue", "white", "red"))(255),
          show_rownames = TRUE,
-         show_colnames = TRUE, # Change to TRUE if you want to show sample names
-         annotation_col = sample_data[samples_order,c("Segment","Scan_Name"), drop = FALSE],
-         fontsize_col = 10,
-         fontsize_row = 10,# Adjust as needed for sample annotations
-main="row-scaled levels of all proteins across all segments")
-rm(data)
+         show_colnames = FALSE,
+         annotation_col = sample_data[samples_order, "Segment_Tags", drop = FALSE],
+         fontsize_col = 12,
+         fontsize_row = 14,
+         fontsize = 20,
+         cellheight = 20,
+         main = "Median-centered log() expression levels of filtered proteins across all ROIs\n(heatmap without dendrograms)",
+         width = 20,
+         height = 10)
 ```
 
-## Download housekeeping (GAPDH and Histone H3) normalized data
+## Download housekee = ing (GAPDH and Histone H3) normalized data
 
 * Quality control was performed using default thresholds from the GeoMX DSP Analysis suite:
 
@@ -815,6 +775,40 @@ HKnormdownload %>%
     has_icon = TRUE,
     icon = "fa fa-save"
   )
+```
+
+```{r,eval=FALSE}
+library(openxlsx)
+library(dplyr)
+
+# Create the list of data frames
+HKnormdownload <- list(
+  data.frame(HKnorm_data@assayData[["exprs"]]),
+  data.frame(HKnorm_data@phenoData@data),
+  data.frame(HKnorm_data@featureData@data)
+)
+
+# Name the data frames in the list
+names(HKnormdownload) <- c("Normalized_Counts", "SampleData", "FeatureData")
+
+# Add Feature column to Normalized_Counts
+HKnormdownload$Normalized_Counts$Feature <- rownames(HKnormdownload$Normalized_Counts)
+HKnormdownload$Normalized_Counts <- HKnormdownload$Normalized_Counts %>% relocate(Feature)
+
+# Define the file path to save the Excel file
+output_path <- "/blue/timgarrett/hkates/Campbell-Thompson/HIRN/results/GeoMX_nCounter.HKnormalized.xlsx"
+
+# Save the list of data frames as an Excel file
+wb <- createWorkbook()
+
+# Loop through the list and add each data frame as a sheet in the Excel file
+for (sheet_name in names(HKnormdownload)) {
+  addWorksheet(wb, sheet_name)
+  writeData(wb, sheet = sheet_name, x = HKnormdownload[[sheet_name]])
+}
+
+# Save the workbook to the specified path
+saveWorkbook(wb, output_path, overwrite = TRUE)
 ```
 
 ## Download housekeeping (GAPDH and Histone H3) and background removed normalized data
@@ -855,5 +849,39 @@ download %>%
     has_icon = TRUE,
     icon = "fa fa-save"
   )
+```
+
+```{r,eval=FALSE}
+library(openxlsx)
+library(dplyr)
+
+# Create the list of data frames
+download <- list(
+  data.frame(HKnorm_bg_data@assayData[["exprs"]]),
+  data.frame(HKnorm_bg_data@phenoData@data),
+  data.frame(HKnorm_bg_data@featureData@data)
+)
+
+# Name the data frames in the list
+names(download) <- c("Normalized_Counts", "SampleData", "FeatureData")
+
+# Add Feature column to Normalized_Counts
+download$Normalized_Counts$Feature <- rownames(download$Normalized_Counts)
+download$Normalized_Counts <- download$Normalized_Counts %>% relocate(Feature)
+
+# Define the file path to save the Excel file
+output_path <- "/blue/timgarrett/hkates/Campbell-Thompson/HIRN/results/GeoMX_nCounter.HKnormalized.bgRemoved.xlsx"
+
+# Save the list of data frames as an Excel file
+wb <- createWorkbook()
+
+# Loop through the list and add each data frame as a sheet in the Excel file
+for (sheet_name in names(download)) {
+  addWorksheet(wb, sheet_name)
+  writeData(wb, sheet = sheet_name, x = download[[sheet_name]])
+}
+
+# Save the workbook to the specified path
+saveWorkbook(wb, output_path, overwrite = TRUE)
 ```
 
