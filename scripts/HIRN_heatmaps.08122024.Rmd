@@ -885,3 +885,82 @@ for (sheet_name in names(download)) {
 saveWorkbook(wb, output_path, overwrite = TRUE)
 ```
 
+# Differential Expression 
+
+```{r}
+# Extract expression data and sample data
+exprs_data <- exprs(data)
+segment_tags <- data@phenoData@data$Segment_Tags
+
+constant_features <- apply(exprs_data, 1, function(x) length(unique(x)) == 1)
+print(sum(constant_features))  # Number of constant features
+
+na_features <- apply(exprs_data, 1, function(x) sum(is.na(x)) > 0)
+print(sum(na_features))  # Number of features with NA values
+
+# Initialize a list to store pairwise t-test results
+pairwise_results <- list()
+
+# Loop through each feature and perform pairwise t-tests
+for (i in 1:nrow(exprs_data)) {
+  feature_values <- exprs_data[i, ]
+  pairwise_test <- pairwise.t.test(feature_values, segment_tags, p.adjust.method = "BH")  # Adjust using Benjamini-Hochberg (can also use "bonferroni")
+  
+  # Store results for each feature
+  pairwise_results[[rownames(exprs_data)[i]]] <- pairwise_test$p.value
+}
+
+# Combine results into a data frame for easier access
+pairwise_df <- do.call(rbind, lapply(names(pairwise_results), function(gene) {
+  p_values <- as.data.frame(as.table(pairwise_results[[gene]]))
+  p_values$Feature <- gene
+  p_values
+}))
+
+# Reorder columns and rename for clarity
+pairwise_df <- pairwise_df[, c("Feature", "Var1", "Var2", "Freq")]
+colnames(pairwise_df) <- c("Feature", "Group1", "Group2", "p_value")
+
+# Filter significant comparisons, ignoring NA p-values
+significant_pairwise <- pairwise_df[!is.na(pairwise_df$p_value) & pairwise_df$p_value < 0.05, ]
+
+# View or save the results
+print(significant_pairwise)
+```
+
+```{r}
+# Calculate group means for normalized and raw data
+calculate_group_means <- function(exprs_matrix, groups) {
+  group_means <- sapply(unique(groups), function(group) {
+    rowMeans(exprs_matrix[, groups == group], na.rm = TRUE)
+  })
+  colnames(group_means) <- unique(groups)
+  return(group_means)
+}
+
+# Group means for the normalized data ("data")
+group_means_data <- calculate_group_means(exprs_data, segment_tags)
+
+# Group means for the raw data ("rawdata")
+group_means_rawdata <- calculate_group_means(exprs_rawdata, segment_tags_raw)
+# Calculate group means for normalized and raw data
+calculate_group_means <- function(exprs_matrix, groups) {
+  group_means <- sapply(unique(groups), function(group) {
+    rowMeans(exprs_matrix[, groups == group], na.rm = TRUE)
+  })
+  colnames(group_means) <- unique(groups)
+  return(group_means)
+}
+
+# Group means for the normalized data ("data")
+group_means_data <- calculate_group_means(exprs_data, segment_tags)
+colnames(group_means_data) <- paste0(colnames(group_means_data), ".norm_mean")
+
+# Group means for the raw data ("rawdata")
+group_means_rawdata <- calculate_group_means(exprs_rawdata, segment_tags_raw)
+colnames(group_means_rawdata) <- paste0(colnames(group_means_rawdata), ".raw_mean")
+
+significant_pairwise <- merge(significant_pairwise,group_means_rawdata,by.x="Feature",by.y=0,all.x=TRUE)
+significant_pairwise <- merge(significant_pairwise,group_means_data,by.x="Feature",by.y=0,all.x=TRUE)
+write.csv(significant_pairwise,"../results/significant_pairwise_ttest_results.csv")
+```
