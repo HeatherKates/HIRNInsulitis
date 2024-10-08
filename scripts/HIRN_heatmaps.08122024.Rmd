@@ -737,7 +737,7 @@ pheatmap(median_centered_data,
          height = 10)
 ```
 
-## Download housekee = ing (GAPDH and Histone H3) normalized data
+## Download housekeeping (GAPDH and Histone H3) normalized data
 
 * Quality control was performed using default thresholds from the GeoMX DSP Analysis suite:
 
