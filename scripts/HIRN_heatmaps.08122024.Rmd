@@ -1,7 +1,7 @@
 ---
 title: "HIRN insulitis nCounter analysis"
 author: "Heather Kates"
-date: "08-12-2024"
+date: "10-09-2024"
 output: html_document
 ---
 
@@ -16,9 +16,10 @@ library(ggplot2)
 library(reshape2)
 library(pheatmap)
 library(knitr)
+select <- dplyr::select
 ```
 
-## Load the nCounter data
+## Step 1. Load the nCounter data
 
 Load the data downloaded from the GeoMX DSP Initial_Dataset.xlsx and received from Zeina.
 
@@ -32,9 +33,9 @@ rawdata <- processNanostringData(nsFiles = "/blue/timgarrett/hkates/Campbell-Tho
                              normalization = "none")
 ```
 
-### Quality Control
+## Step 2. Quality Control
 
-## Segment QC (housekeeping and background geomean)
+### Segment QC (housekeeping and background geomean)
 
 The purpose of AOI-level QC is to identify AOIs with poor data that should be removed. We should look at both signal strength and background.
 
@@ -72,11 +73,12 @@ plot_data <- data.frame(
 )
 
 # Plot the barplot with no x-axis labels and "Individual ROIs" as the x-axis title
-ggplot(plot_data, aes(x = Sample, y = HK_Geomean, fill = Scan_Name)) +
+p <- ggplot(plot_data, aes(x = Sample, y = HK_Geomean, fill = Scan_Name)) +
   geom_bar(stat = "identity") +
   theme_minimal() +
   labs(x = "Individual ROIs", y = "Housekeeper Geomean", fill = "Scan Name") +
   theme(axis.text.x = element_blank(), axis.ticks.x = element_blank())
+print(p)
 ```
 
 
@@ -112,14 +114,15 @@ plot_data <- data.frame(
 )
 
 # Create the bar plot for IgG genes
-ggplot(plot_data, aes(x = Sample, y = IgG_Geomean, fill = Scan_Name)) +
+p2 <- ggplot(plot_data, aes(x = Sample, y = IgG_Geomean, fill = Scan_Name)) +
   geom_bar(stat = "identity") +
   theme_minimal() +
   labs(x = "Individual ROIs", y = "IgG Geomean", fill = "Scan Name") +
   theme(axis.text.x = element_blank(), axis.ticks.x = element_blank())
+print(p2)
 ```
 
-## Segment QC part II
+### Segment QC part II
 
 Technical QC assessment includes FOV registration QC, Binding Density QC, Positive Control Normalization QC, Minimum nuclei count, Minimum surface area
 
@@ -155,7 +158,7 @@ QC_data$samples$NucleiCount_QC_Flag <- QC_data$samples$AOI_nuclei_count < nuclei
 QC_data$samples$SurfaceArea_QC_Flag <- QC_data$samples$AOI_surface_area < surface_area_min
 ```
 
-## Results of segment QC
+### Results of segment QC
 
 ```{r results='asis'}
 # Assuming QC_data is your data frame with sample data and QC flags
@@ -170,11 +173,11 @@ kable(QC_flagged_data,row.names = FALSE)
 QC_flagged_segments <- QC_flagged_data$Custom_Segment_Name
 ```
 
-## Probe QC
+### Probe QC
 
 Probes that never rise above background should be interpreted carefully. The plot below shows a  convenient way to identify poorly-performing probes. 
 
-Here we compute and plot the “signal-tobackground” ratio per target, which is each AOI’s data divided by its IgG geomean.
+Here we compute and plot the “signal-to-background” ratio per target, which is each AOI’s data divided by its IgG geomean.
 
 ```{r}
 data <- rawdata
@@ -227,7 +230,7 @@ print(boxplot)
 ```
 
 
-## Prune the dataset as needed
+### Prune the dataset as needed
 
 We will remove the four segments that failed segment QC. 
 
@@ -240,13 +243,15 @@ data_filtered <- rawdata
 
 For now, we will leave all the probes in the dataset even though some have below background signal. We will make a list of these so that we can proceed with caution when evaluating results for these genes
 
-### Normalization
+## Step 3. Normalization
+
+### Determine most appropriate normalization method
 
 Options for normalization include housekeeping, negative control normalization, background correction, and scale to area or nuclei count.
 
 It is not recommended to use multiple of these options, but instead to explore the data and choose one approach to normalize.
 
-## Explore IgG consistency  (Negative control normalization)
+#### Explore IgG consistency  (Negative control normalization)
 
 Do the IgG's have high enough counts to be used for normalization? 
 
@@ -298,12 +303,14 @@ for (i in seq_along(ig_pairs)) {
     plots[[i]] <- p
 }
 
-# Print the plots
-print(plots)
+# Print each plot from the list
+for (p in plots) {
+    print(p)  # This ensures each plot is printed individually
+}
 ```
 
 
-## Explore Housekeeper consistency (Housekeeping normalization)
+#### Explore Housekeeper consistency (Housekeeping normalization)
 
 Assumes the housekeepers measure primarily signal strength
 
@@ -363,12 +370,16 @@ for (i in seq_along(hk_pairs)) {
 }
 
 # Print the plots and correlations
-print(plots)
+# Print each plot from the list
+for (p in plots) {
+    print(p)  # This ensures each plot is printed individually
+}
+
 print(correlations)
 ```
 
 
-### Check for consistency between IgG's, housekeepers, area, nuclei counts
+#### Check for consistency between IgG's, housekeepers, area, nuclei counts
 
 Check how the different variables perform with respect to each other before normalization. This also let's use assess whether scaling to area and nuclei counts is a viable approach.
 
@@ -473,7 +484,7 @@ print(p6)
 
 Based on these results, we can consider HK normalization and scaling to nuceli count or area.
 
-## Normalization
+#### Perform Normalization
 
 We will use housekeeping normalization with GAPDH and Histone H3
 
@@ -500,7 +511,9 @@ HKnorm_data <- processNanostringData(nsFiles = "/blue/timgarrett/hkates/Campbell
                              housekeeping = c("GAPDH","Histone H3","S6"))
 ```
 
-## View metadata
+## Step 4. Visualizations
+
+### View metadata
 
 The variable used to assess heterogeneity was called "Segment_Tags" and has six levels.
 
@@ -509,7 +522,7 @@ knitr::kable(table(HKnorm_data$Segment_Tags),
              caption = "Distribution of Groups")
 ```
 
-## View a PCA of ROIs colored by Scan_Name to assess batch effects
+### PCA plot of ROIs colored by Scan_Name to assess batch effects
 
 ```{r PCA1,echo=FALSE}
 data <- HKnorm_data
@@ -544,7 +557,7 @@ print(PCAp)
 rm(data)
 ```
 
-## View a PCA of ROIs colored by variable of interest
+### PCA plot of ROIs colored by variable of interest
 
 ```{r PCA2,echo=FALSE}
 data <- HKnorm_data
@@ -560,7 +573,8 @@ PCAp <- ggplot(pca_data, aes(x = PC1, y = PC2, color = groups)) +
   labs(title = "PCA of Expression Data", x = "PC1", y = "PC2") +
   scale_color_discrete(name = "groups")
 # Display the plot
-print(PCAp)
+#print(PCAp)
+
 # Update the PCA plot with better aesthetics
 PCAprint <- PCAp + 
   theme_minimal(base_size = 16) +  # Set a minimal theme with a base font size
@@ -585,14 +599,16 @@ PCAprint <- PCAp +
   ) +
   geom_point(size = 3)  # Make points larger and vary shapes by group
 
+print(PCAprint)
 # Save the updated plot
 ggsave("/blue/timgarrett/hkates/Campbell-Thompson/HIRN/results/PCA_plot.png", PCAprint, dpi = 300, width = 10, height = 8)
 rm(data)
 ```
 
-## Heatmaps with only proteins that passed background QC
 
-```{r,echo=TRUE}
+
+```{r,echo=FALSE,eval=TRUE}
+### Heatmaps with only proteins that passed background QC
 #Process the filtered data with housekeeping normalization, bgType = "threshold"
 HKnorm_bg_data <- processNanostringData(nsFiles = "/blue/timgarrett/hkates/Campbell-Thompson/HIRN/results/filtered_counts.csv",
                              sampleTab = "/blue/timgarrett/hkates/Campbell-Thompson/HIRN/results/filtered_sample_data.csv",
@@ -608,11 +624,11 @@ HKnorm_bg_data <- processNanostringData(nsFiles = "/blue/timgarrett/hkates/Campb
 Subset_bg_data <- HKnorm_bg_data[,pData(HKnorm_bg_data)$Segment %in% c("CD45","Others")]
 ```
 
-### We can look at a heatmap of row-scaled data where the heatmap displays how each sample's expression level of a given protein compares to the average expression level of that protein across all samples. 
-
-Therefore, the color in the heatmap indicates how much higher or lower the expression is relative to the protein's own average, not the absolute expression levels. Note that in row-scaled data, you cannot compare the relative levels of a protein within a sample.
-
 ```{r QCScaledHeatmap,echo=FALSE,fig.dim=c(10,6),eval=FALSE}
+#### We can look at a heatmap of row-scaled data where the heatmap displays how each sample's expression level of a given protein compares to the average expression level of that protein across all samples. 
+
+#Therefore, the color in the heatmap indicates how much higher or lower the expression is relative to the protein's own average, not the #absolute expression levels. Note that in row-scaled data, you cannot compare the relative levels of a protein within a sample.
+
 data <- HKnorm_bg_data
 # Extract expression data for the genes of interest
 genes_to_plot <- rownames(data@featureData@data %>% filter(CodeClass=="Endogenous"))
@@ -634,7 +650,7 @@ heatmap_data <- genes_data[, samples_order]
 
 # Plot the heatmap
 # Note: Adjust the parameters of pheatmap as needed for your specific dataset and visualization preferences
-pheatmap(heatmap_data,
+pheat1 <- pheatmap(heatmap_data,
          scale = "row", # Scale proteins to have 0 mean and 1 variance
          clustering_distance_rows = "euclidean",
          clustering_distance_cols = "euclidean",
@@ -648,10 +664,14 @@ pheatmap(heatmap_data,
          fontsize_col = 10,
          fontsize_row = 10,# Adjust as needed for sample annotations
 main="row-scaled levels of QC-passed proteins across all segments")
+print(pheat1)
+
 rm(data)
 ```
 
-## Heatmap of all protein expression for the normalized segments
+### Heatmap of all protein expression for the normalized segments
+
+The data used to make the heatmap is available in the download "GeoMX_nCounter.HKnormalized.bgRemoved.xlsx" accessed by clicking the button "Download HK normalized bg removed expression data and metadata" further down in the report.
 
 ```{r}
 #Subset CD45 segments
@@ -659,7 +679,7 @@ rm(data)
 Subset_data <- HKnorm_bg_data
 ```
 
-```{r AllHeatmap,echo=FALSE,fig.dim=c(10,6)}
+```{r AllHeatmap,echo=FALSE,fig.dim=c(12,10)}
 data <- Subset_data
 
 # Extract expression data for the genes of interest
@@ -697,7 +717,7 @@ width <- 10 + (90 * 0.2)  # Adjust width for 90 columns
 height <- 10 + (35 * 0.5) # Adjust height for 35 rows
 
 # Create the heatmap with a multi-line title
-pheatmap(median_centered_data,
+pheat2 <- pheatmap(median_centered_data,
          scale = "none", # Scaling already done manually
          clustering_distance_rows = "euclidean",
          clustering_distance_cols = "euclidean",
@@ -710,34 +730,19 @@ pheatmap(median_centered_data,
          annotation_col = sample_data[samples_order, "Segment_Tags", drop = FALSE],
          fontsize_col = 12,  # Increase column annotation font size if needed
          fontsize_row = 14,  # Increase row label font size
-         fontsize = 20,      # Increase general font size (affects legend, etc.)
+         fontsize = 11,      # Increase general font size (affects legend, etc.)
          cellheight = 20,     # Adjust cell height to make rows shorter
          main = "Median-centered log() expression levels of filtered proteins across all ROIs\n(heatmap without dendrograms)",
-         filename = output_file,  # Saving directly to a file
+         #filename = output_file,  # Saving directly to a file
          width = 20,           # Adjust these parameters as needed
-         height = 10)
+         height = 20)
 
-pheatmap(median_centered_data,
-         scale = "none",
-         clustering_distance_rows = "euclidean",
-         clustering_distance_cols = "euclidean",
-         clustering_method = "complete",
-         cluster_cols = TRUE,
-         cluster_rows = TRUE,
-         color = colorRampPalette(c("blue", "white", "red"))(255),
-         show_rownames = TRUE,
-         show_colnames = FALSE,
-         annotation_col = sample_data[samples_order, "Segment_Tags", drop = FALSE],
-         fontsize_col = 12,
-         fontsize_row = 14,
-         fontsize = 20,
-         cellheight = 20,
-         main = "Median-centered log() expression levels of filtered proteins across all ROIs\n(heatmap without dendrograms)",
-         width = 20,
-         height = 10)
+print(pheat2)
 ```
 
-## Download housekeeping (GAPDH and Histone H3) normalized data
+## Step 5. Download normalized data
+
+### Download housekeeping (GAPDH and Histone H3) normalized data
 
 * Quality control was performed using default thresholds from the GeoMX DSP Analysis suite:
 
@@ -811,7 +816,7 @@ for (sheet_name in names(HKnormdownload)) {
 saveWorkbook(wb, output_path, overwrite = TRUE)
 ```
 
-## Download housekeeping (GAPDH and Histone H3) and background removed normalized data
+### Download housekeeping (GAPDH and Histone H3) and background removed normalized data
 
 * Quality control was performed using default thresholds from the GeoMX DSP Analysis suite:
 
@@ -885,7 +890,12 @@ for (sheet_name in names(download)) {
 saveWorkbook(wb, output_path, overwrite = TRUE)
 ```
 
-# Differential Expression 
+## Step 6. Differential Expression Analysis
+
+Differential expression of proteins between "Segment_Tags" groups was determined by pairwise t tests using the R function pairwise.t.test. Global p-value correction to control the error rate across all the tests performed on the dataset was performed using  Benjamini-Hochberg (BH) correction.
+
+The data used for differential expression testing is available in the download "GeoMX_nCounter.HKnormalized.bgRemoved.xlsx" accessed by clicking the button "Download HK normalized bg removed expression data and metadata" above in the report.
+
 
 ```{r}
 # Extract expression data and sample data
@@ -893,10 +903,8 @@ exprs_data <- exprs(data)
 segment_tags <- data@phenoData@data$Segment_Tags
 
 constant_features <- apply(exprs_data, 1, function(x) length(unique(x)) == 1)
-print(sum(constant_features))  # Number of constant features
 
 na_features <- apply(exprs_data, 1, function(x) sum(is.na(x)) > 0)
-print(sum(na_features))  # Number of features with NA values
 
 # Initialize a list to store pairwise t-test results
 pairwise_results <- list()
@@ -904,7 +912,7 @@ pairwise_results <- list()
 # Loop through each feature and perform pairwise t-tests
 for (i in 1:nrow(exprs_data)) {
   feature_values <- exprs_data[i, ]
-  pairwise_test <- pairwise.t.test(feature_values, segment_tags, p.adjust.method = "BH")  # Adjust using Benjamini-Hochberg (can also use "bonferroni")
+  pairwise_test <- pairwise.t.test(feature_values, segment_tags, p.adjust.method = "none")  # do not adjust
   
   # Store results for each feature
   pairwise_results[[rownames(exprs_data)[i]]] <- pairwise_test$p.value
@@ -917,15 +925,15 @@ pairwise_df <- do.call(rbind, lapply(names(pairwise_results), function(gene) {
   p_values
 }))
 
+# Apply Benjamini-Hochberg (BH) correction across all p-values in the pairwise_df
+pairwise_df$adj_p_value <- p.adjust(pairwise_df$Freq, method = "BH")
+
 # Reorder columns and rename for clarity
-pairwise_df <- pairwise_df[, c("Feature", "Var1", "Var2", "Freq")]
-colnames(pairwise_df) <- c("Feature", "Group1", "Group2", "p_value")
+pairwise_df <- pairwise_df[, c("Feature", "Var1", "Var2", "Freq","adj_p_value")]
+colnames(pairwise_df) <- c("Feature", "Group1", "Group2", "p_value","adj_p_value")
 
 # Filter significant comparisons, ignoring NA p-values
-significant_pairwise <- pairwise_df[!is.na(pairwise_df$p_value) & pairwise_df$p_value < 0.05, ]
-
-# View or save the results
-print(significant_pairwise)
+significant_pairwise <- pairwise_df[!is.na(pairwise_df$p_value) & pairwise_df$adj_p_value < 0.05, ]
 ```
 
 ```{r}
@@ -938,19 +946,13 @@ calculate_group_means <- function(exprs_matrix, groups) {
   return(group_means)
 }
 
-# Group means for the normalized data ("data")
-group_means_data <- calculate_group_means(exprs_data, segment_tags)
+# Get expression data for both normalized ("data") and raw data ("rawdata")
+exprs_data <- exprs(data)  # From "data"
+exprs_rawdata <- exprs(rawdata)  # From "rawdata"
 
-# Group means for the raw data ("rawdata")
-group_means_rawdata <- calculate_group_means(exprs_rawdata, segment_tags_raw)
-# Calculate group means for normalized and raw data
-calculate_group_means <- function(exprs_matrix, groups) {
-  group_means <- sapply(unique(groups), function(group) {
-    rowMeans(exprs_matrix[, groups == group], na.rm = TRUE)
-  })
-  colnames(group_means) <- unique(groups)
-  return(group_means)
-}
+# Extract group labels
+segment_tags <- data@phenoData@data$Segment_Tags
+segment_tags_raw <- rawdata@phenoData@data$Segment_Tags  # Group labels for raw data
 
 # Group means for the normalized data ("data")
 group_means_data <- calculate_group_means(exprs_data, segment_tags)
@@ -964,3 +966,16 @@ significant_pairwise <- merge(significant_pairwise,group_means_rawdata,by.x="Fea
 significant_pairwise <- merge(significant_pairwise,group_means_data,by.x="Feature",by.y=0,all.x=TRUE)
 write.csv(significant_pairwise,"../results/significant_pairwise_ttest_results.csv")
 ```
+
+```{r}
+significant_pairwise %>% 
+  download_this(
+    output_name = "GeoMX_nCounter.DifferentialExpressionResults",
+    output_extension = ".xlsx",
+    button_label = "Download significant pairwise t test results",
+    button_type = "default",
+    has_icon = TRUE,
+    icon = "fa fa-save"
+  )
+```
+
